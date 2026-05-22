@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport"
+content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+<title>Basic Cubic Game Open Source</title>
+
+<style>
+
+html,body{
+    margin:0;
+    overflow:hidden;
+    touch-action:none;
+    background:black;
+    font-family:sans-serif;
+}
+
+canvas{
+    display:block;
+}
+
+/* HUD */
+
+#hud{
+    position:fixed;
+    inset:0;
+    pointer-events:none;
+}
+
+/* mira */
+
+#crosshair{
+    position:absolute;
+    top:50%;
+    left:50%;
+    width:12px;
+    height:12px;
+    transform:translate(-50%,-50%);
+}
+
+#crosshair::before,
+#crosshair::after{
+    content:"";
+    position:absolute;
+    background:white;
+}
+
+#crosshair::before{
+    width:12px;
+    height:2px;
+    top:5px;
+}
+
+#crosshair::after{
+    width:2px;
+    height:12px;
+    left:5px;
+}
+
+/* vida */
+
+#hearts{
+    position:absolute;
+    top:15px;
+    left:15px;
+    display:flex;
+    gap:2px;
+}
+
+.heart{
+    width:18px;
+    height:18px;
+    image-rendering:pixelated;
+}
+
+/* inventario */
+
+#inventory{
+    position:absolute;
+    left:50%;
+    bottom:15px;
+    transform:translateX(-50%);
+    display:flex;
+    gap:8px;
+    pointer-events:auto;
+}
+
+.slot{
+    width:60px;
+    height:60px;
+    background:rgba(0,0,0,.45);
+    border:3px solid white;
+    border-radius:14px;
+    position:relative;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    color:white;
+    font-size:12px;
+    user-select:none;
+}
+
+.slot.selected{
+    border-color:yellow;
+}
+
+.count{
+    position:absolute;
+    right:5px;
+    bottom:2px;
+    font-size:14px;
+}
+
+/* fullscreen */
+
+#fullscreenBtn{
+    position:absolute;
+    top:15px;
+    right:15px;
+    width:55px;
+    height:55px;
+    border-radius:15px;
+    border:2px solid white;
+    background:rgba(0,0,0,.45);
+    color:white;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    pointer-events:auto;
+    font-size:22px;
+}
+
+/* créditos */
+
+#credit{
+    position:absolute;
+    top:75px;
+    right:18px;
+    color:white;
+    font-size:14px;
+    text-shadow:0 0 5px black;
+}
+
+/* joystick */
+
+#joyArea{
+    position:absolute;
+    bottom:90px;
+    left:30px;
+    width:120px;
+    height:120px;
+    background:rgba(255,255,255,.15);
+    border-radius:50%;
+    pointer-events:auto;
+}
+
+#joy{
+    position:absolute;
+    width:55px;
+    height:55px;
+    border-radius:50%;
+    background:white;
+    left:32px;
+    top:32px;
+}
+
+/* botoes */
+
+#actions{
+    position:absolute;
+    right:20px;
+    bottom:90px;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+    pointer-events:auto;
+}
+
+.btn{
+    width:75px;
+    height:75px;
+    border-radius:20px;
+    background:rgba(0,0,0,.45);
+    border:2px solid white;
+    color:white;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:12px;
+    font-weight:bold;
+}
+
+</style>
+</head>
+
+<body>
+
+<div id="hud">
+
+<div id="crosshair"></div>
+
+<div id="hearts"></div>
+
+<div id="fullscreenBtn">⛶</div>
+
+<div id="credit">
+by davi
+</div>
+
+<div id="joyArea">
+<div id="joy"></div>
+</div>
+
+<div id="actions">
+<div class="btn" id="break">QUEBRAR</div>
+<div class="btn" id="place">COLOCAR</div>
+<div class="btn" id="fly">VOAR</div>
+</div>
+
+<div id="inventory">
+
+<div class="slot" id="slotStone">
+🪨
+<div class="count" id="stoneCount">0</div>
+</div>
+
+<div class="slot" id="slotWood">
+🪵
+<div class="count" id="woodCount">0</div>
+</div>
+
+</div>
+
+</div>
+
+<script type="module">
+
+import * as THREE from 'https://cdn.skypack.dev/three@0.152.2';
+
+/* ===== CENA ===== */
+
+const scene = new THREE.Scene();
+
+scene.background = new THREE.Color(0x87CEEB);
+
+const camera = new THREE.PerspectiveCamera(
+75,
+innerWidth/innerHeight,
+0.1,
+2000
+);
+
+camera.rotation.order = "YXZ";
+
+const renderer = new THREE.WebGLRenderer({
+    antialias:false,
+    powerPreference:"high-performance"
+});
+
+renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));
+
+renderer.setSize(innerWidth,innerHeight);
+
+document.body.appendChild(renderer.domElement);
+
+/* ===== LUZ ===== */
+
+scene.add(
+new THREE.HemisphereLight(
+0xffffff,
+0x444444,
+1.4
+));
+
+const sun = new THREE.DirectionalLight(0xffffff,1);
+
+sun.position.set(20,30,10);
+
+scene.add(sun);
+
+/* ===== FULLSCREEN ===== */
+
+document.getElementById("fullscreenBtn")
+.ontouchstart = ()=>{
+
+    if(!document.fullscreenElement){
+
+        document.documentElement
+        .requestFullscreen();
+
+    }else{
+
+        document.exitFullscreen();
+    }
+};
+
+/* ===== TEXTURAS ===== */
+
+function makeTexture(c1,c2){
+
+    const canvas = document.createElement("canvas");
+
+    canvas.width = 64;
+    canvas.height = 64;
+
+    const ctx = canvas.getContext("2d");
+
+    ctx.fillStyle = c1;
+    ctx.fillRect(0,0,64,64);
+
+    for(let i=0;i<120;i++){
+
+        ctx.fillStyle = c2;
+
+        ctx.fillRect(
+            Math.random()*64,
+            Math.random()*64,
+            4,
+            4
+        );
+    }
+
+    const tex = new THREE.CanvasTexture(canvas);
+
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.NearestFilter;
+
+    return tex;
+}
+
+const grassMat = new THREE.MeshLambertMaterial({
+    map:makeTexture("#4CAF50","#2E7D32")
+});
+
+const stoneMat = new THREE.MeshLambertMaterial({
+    map:makeTexture("#999","#666")
+});
+
+const woodMat = new THREE.MeshLambertMaterial({
+    map:makeTexture("#7B5A3A","#5C4033")
+});
+
+const leafMat = new THREE.MeshLambertMaterial({
+    map:makeTexture("#3FA34D","#2E7D32")
+});
+
+/* ===== VIDA ===== */
+
+let health = 10;
+
+const heartsDiv = document.getElementById("hearts");
+
+function renderHearts(){
+
+    heartsDiv.innerHTML = "";
+
+    for(let i=0;i<10;i++){
+
+        const img = document.createElement("img");
+
+        img.className = "heart";
+
+        img.src =
+'https://artr2.pixilart.com/cfr22a002e4465aws3.png';
+
+        img.style.opacity = i < health ? 1 : 0.2;
+
+        heartsDiv.appendChild(img);
+    }
+}
+
+renderHearts();
+
+function damage(amount){
+
+    health -= amount;
+
+    if(health < 0) health = 0;
+
+    renderHearts();
+
+    if(health <= 0){
+
+        alert("VOCÊ MORREU");
+
+        location.reload();
+    }
+}
+
+/* ===== INVENTARIO ===== */
+
+let inventory = {
+    stone:0,
+    wood:0
+};
+
+let selectedBlock = null;
+
+const slotStone =
+document.getElementById("slotStone");
+
+const slotWood =
+document.getElementById("slotWood");
+
+function updateInventory(){
+
+    document.getElementById("stoneCount")
+    .innerText = inventory.stone;
+
+    document.getElementById("woodCount")
+    .innerText = inventory.wood;
+}
+
+slotStone.onclick = ()=>{
+
+    selectedBlock = "stone";
+
+    slotStone.classList.add("selected");
+    slotWood.classList.remove("selected");
+};
+
+slotWood.onclick = ()=>{
+
+    selectedBlock = "wood";
+
+    slotWood.classList.add("selected");
+    slotStone.classList.remove("selected");
+};
+
+updateInventory();
+
+/* ===== BLOCOS ===== */
+
+const geo = new THREE.BoxGeometry(1,1,1);
+
+let blocks = [];
+
+function addBlock(x,y,z,mat,type){
+
+    const mesh = new THREE.Mesh(geo,mat);
+
+    mesh.position.set(x,y,z);
+
+    mesh.userData.type = type;
+
+    scene.add(mesh);
+
+    blocks.push(mesh);
+}
+
+/* ===== MAPA ===== */
+
+for(let x=-50;x<50;x++){
+
+    for(let z=-50;z<50;z++){
+
+        addBlock(x,0,z,grassMat,"grass");
+
+        if(Math.random() > 0.96){
+
+            addBlock(x,1,z,stoneMat,"stone");
+        }
+    }
+}
+
+/* ===== ÁRVORES ===== */
+
+function makeTree(x,z){
+
+    for(let y=1;y<=4;y++){
+
+        addBlock(x,y,z,woodMat,"wood");
+    }
+
+    for(let xx=-2;xx<=2;xx++){
+
+        for(let zz=-2;zz<=2;zz++){
+
+            for(let yy=4;yy<=6;yy++){
+
+                if(Math.random() > 0.2){
+
+                    addBlock(
+                        x+xx,
+                        yy,
+                        z+zz,
+                        leafMat,
+                        "leaf"
+                    );
+                }
+            }
+        }
+    }
+}
+
+for(let i=0;i<40;i++){
+
+    const tx =
+    Math.floor(Math.random()*90)-45;
+
+    const tz =
+    Math.floor(Math.random()*90)-45;
+
+    makeTree(tx,tz);
+}
+
+/* ===== PLAYER ===== */
+
+camera.position.set(0,2,5);
+
+let velY = 0;
+
+let flyMode = false;
+
+let lastGroundY = 0;
+
+/* ===== JOYSTICK ===== */
+
+let move = {x:0,z:0};
+
+const joyArea =
+document.getElementById("joyArea");
+
+const joy =
+document.getElementById("joy");
+
+let moving = false;
+
+joyArea.addEventListener("touchstart",()=>{
+
+    moving = true;
+});
+
+window.addEventListener("touchend",()=>{
+
+    moving = false;
+
+    move = {x:0,z:0};
+
+    joy.style.transform =
+    "translate(0px,0px)";
+});
+
+window.addEventListener("touchmove",(e)=>{
+
+    if(!moving) return;
+
+    const t = e.touches[0];
+
+    const rect =
+    joyArea.getBoundingClientRect();
+
+    let dx =
+    t.clientX-(rect.left+rect.width/2);
+
+    let dy =
+    t.clientY-(rect.top+rect.height/2);
+
+    const dist =
+    Math.min(Math.hypot(dx,dy),40);
+
+    const ang = Math.atan2(dy,dx);
+
+    move.x =
+    Math.cos(ang)*(dist/40);
+
+    move.z =
+    Math.sin(ang)*(dist/40);
+
+    joy.style.transform =
+    `translate(${Math.cos(ang)*dist}px,
+    ${Math.sin(ang)*dist}px)`;
+});
+
+/* ===== OLHAR ===== */
+
+let yaw = 0;
+let pitch = 0;
+
+let looking = false;
+
+let lastX = 0;
+let lastY = 0;
+
+renderer.domElement
+.addEventListener("touchstart",(e)=>{
+
+    const x = e.touches[0].clientX;
+
+    if(x > innerWidth/2){
+
+        looking = true;
+
+        lastX = x;
+        lastY = e.touches[0].clientY;
+    }
+});
+
+renderer.domElement
+.addEventListener("touchend",()=>{
+
+    looking = false;
+});
+
+renderer.domElement
+.addEventListener("touchmove",(e)=>{
+
+    if(!looking) return;
+
+    const t = e.touches[0];
+
+    const dx = t.clientX-lastX;
+    const dy = t.clientY-lastY;
+
+    yaw -= dx * 0.004;
+    pitch -= dy * 0.004;
+
+    pitch = Math.max(
+        -Math.PI/2,
+        Math.min(Math.PI/2,pitch)
+    );
+
+    camera.rotation.y = yaw;
+    camera.rotation.x = pitch;
+
+    lastX = t.clientX;
+    lastY = t.clientY;
+});
+
+/* ===== RAYCAST ===== */
+
+const raycaster = new THREE.Raycaster();
+
+/* quebrar */
+
+async function breakBlock(){
+
+    raycaster.setFromCamera(
+        new THREE.Vector2(0,0),
+        camera
+    );
+
+    const hits =
+    raycaster.intersectObjects(blocks);
+
+    if(!hits.length) return;
+
+    const obj = hits[0].object;
+
+    if(hits[0].distance > 6) return;
+
+    const originalScale = obj.scale.x;
+
+    /* animação */
+
+    for(let i=0;i<20;i++){
+
+        obj.scale.setScalar(
+            originalScale - i*0.03
+        );
+
+        await new Promise(r=>setTimeout(r,100));
+    }
+
+    scene.remove(obj);
+
+    blocks = blocks.filter(b=>b!==obj);
+
+    /* inventário */
+
+    if(obj.userData.type === "stone"){
+
+        inventory.stone++;
+    }
+
+    if(obj.userData.type === "wood"){
+
+        inventory.wood++;
+    }
+
+    updateInventory();
+}
+
+/* colocar */
+
+function placeBlock(){
+
+    if(selectedBlock == null) return;
+
+    if(selectedBlock === "stone" &&
+    inventory.stone <= 0) return;
+
+    if(selectedBlock === "wood" &&
+    inventory.wood <= 0) return;
+
+    raycaster.setFromCamera(
+        new THREE.Vector2(0,0),
+        camera
+    );
+
+    const hits =
+    raycaster.intersectObjects(blocks);
+
+    if(!hits.length) return;
+
+    const p =
+    hits[0].object.position.clone()
+    .add(hits[0].face.normal);
+
+    if(selectedBlock === "stone"){
+
+        addBlock(
+            Math.round(p.x),
+            Math.round(p.y),
+            Math.round(p.z),
+            stoneMat,
+            "stone"
+        );
+
+        inventory.stone--;
+    }
+
+    if(selectedBlock === "wood"){
+
+        addBlock(
+            Math.round(p.x),
+            Math.round(p.y),
+            Math.round(p.z),
+            woodMat,
+            "wood"
+        );
+
+        inventory.wood--;
+    }
+
+    updateInventory();
+}
+
+document.getElementById("break")
+.ontouchstart = ()=>{
+
+    breakBlock();
+};
+
+document.getElementById("place")
+.ontouchstart = ()=>{
+
+    placeBlock();
+};
+
+document.getElementById("fly")
+.ontouchstart = ()=>{
+
+    flyMode = !flyMode;
+};
+
+/* ===== LOOP ===== */
+
+function animate(){
+
+    requestAnimationFrame(animate);
+
+    const forward = new THREE.Vector3();
+
+    camera.getWorldDirection(forward);
+
+    forward.y = 0;
+
+    forward.normalize();
+
+    const right = new THREE.Vector3();
+
+    right.crossVectors(
+        forward,
+        new THREE.Vector3(0,1,0)
+    );
+
+    /* movimento */
+
+    camera.position.addScaledVector(
+        forward,
+        -move.z * 0.14
+    );
+
+    camera.position.addScaledVector(
+        right,
+        move.x * 0.14
+    );
+
+    /* gravidade */
+
+    if(!flyMode){
+
+        velY -= 0.012;
+
+        if(velY < -0.6){
+
+            velY = -0.6;
+        }
+
+        camera.position.y += velY;
+
+        if(camera.position.y <= 1.8){
+
+            if(lastGroundY -
+            camera.position.y > 6){
+
+                damage(
+                    Math.floor(
+                    (lastGroundY-
+                    camera.position.y)/2
+                    )
+                );
+            }
+
+            camera.position.y = 1.8;
+
+            velY = 0;
+
+            lastGroundY = 1.8;
+
+        }else{
+
+            if(camera.position.y >
+            lastGroundY){
+
+                lastGroundY =
+                camera.position.y;
+            }
+        }
+    }
+
+    renderer.render(scene,camera);
+}
+
+animate();
+
+/* ===== RESIZE ===== */
+
+window.addEventListener("resize",()=>{
+
+    camera.aspect =
+    innerWidth/innerHeight;
+
+    camera.updateProjectionMatrix();
+
+    renderer.setSize(
+        innerWidth,
+        innerHeight
+    );
+});
+
+</script>
+
+</body>
+</html>
